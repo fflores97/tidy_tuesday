@@ -12,12 +12,14 @@ library(tidyverse)
 # Import Data
 
 ```{r , message=FALSE, warning=FALSE}
-data <- read_csv(file = "week4_australian_salary.csv") %>% 
+data_raw <- read_csv(file = "week4_australian_salary.csv") %>% 
 # The dataset for some reason included some \x96 and \x92 characters that I simply replaced
   mutate(occupation = str_replace(occupation, pattern = "\x96", replacement = "-")) %>% 
   mutate(occupation = str_replace(occupation, pattern = "\x92", replacement = "")) %>% 
 # Then I arrange by gender and income
-  arrange(gender, desc(average_taxable_income)) %>% 
+  arrange(gender, desc(average_taxable_income))
+  
+data <- data_raw %>% 
 # And let's only use these variables
   select(c(occupation, gender, average_taxable_income))
 ```
@@ -82,5 +84,70 @@ data %>%
         axis.ticks.y = element_blank()) 
 
 ggsave(filename = "plot1.png", device = "png", plot = last_plot())
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# This function sums salaries across the top n positions and gives a tidy data frame for plotting
+totalNSalaries <- function(df, variable, number){
+  variable <- enquo(variable)
+  salary = tibble(gender = df$gender, n = number, salary = map_dbl(df$data, ~sum(select(., !!variable) %>% top_n(number))))
+}
+
+topPositions <- seq(1,1000)
+
+# We nest the data in order to apply the function I've created
+byGender <- data_raw %>% 
+  group_by(gender) %>% 
+  mutate(total_per_occupation = as.double(individuals * (average_taxable_income /1000000))) %>% 
+  arrange(desc(total_per_occupation)) %>% 
+  select(c(gender, total_per_occupation, occupation)) %>% 
+  nest(-gender) 
+
+# There probably is a better way to do this but I don't know it yet
+totalWages <- select(byGender, -data)
+for(i in topPositions){
+  totalWages <- bind_rows(totalWages, totalNSalaries(byGender, total_per_occupation, i))
+}
+
+# Plot
+totalWages %>% 
+  mutate(salary = salary/1000) %>% 
+  ggplot(aes(x = n, y = salary))+
+  geom_area(aes(group = gender, fill = gender))+
+  ylab("Estimate of Total Paid Wages [Billions of Dollars]")+
+  xlab("Top n positions")+
+  theme_bw()+
+  scale_fill_manual(values = alpha(c("#F8766D", "#00BFC4"),alpha = 0.7))
+
+```
+
+
+```{r message=FALSE, warning=FALSE, eval=FALSE}
+totalNSalaries1 <- function(df, variable, number){
+  variable <- enquo(variable)
+  salary = tibble(gender = df$gender, n = number, salary = map_dbl(df$data, ~sum(select(., !!variable) %>% top_n(number))))
+}
+
+byGender1 <- data_raw %>% 
+  group_by(gender) %>% 
+  mutate(per_occupation = average_taxable_income) %>% 
+  arrange(desc(per_occupation)) %>% 
+  select(c(gender, per_occupation, occupation)) %>% 
+  nest(-gender) #%>% 
+
+totalWages1 <- select(byGender1, -data)
+for(i in seq(1,1000)){
+  totalWages1 <- bind_rows(totalWages1, totalNSalaries1(byGender1, per_occupation, i))
+}
+
+totalWages1 %>% 
+  mutate(salary = salary/1000) %>% 
+  ggplot(aes(x = n, y = salary))+
+  geom_area(aes(group = gender, fill = gender))+
+  ylab("Estimate of Total Paid Wages [Billions of Dollars]")+
+  xlab("Top n positions")+
+  theme_bw()
 
 ```
