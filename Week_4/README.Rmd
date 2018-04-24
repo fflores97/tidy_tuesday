@@ -1,0 +1,86 @@
+---
+title: "Tidy Tuesday Week 4"
+author: "Felipe Flores"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Import Data
+
+```{r , message=FALSE, warning=FALSE}
+data <- read_csv(file = "week4_australian_salary.csv") %>% 
+# The dataset for some reason included some \x96 and \x92 characters that I simply replaced
+  mutate(occupation = str_replace(occupation, pattern = "\x96", replacement = "-")) %>% 
+  mutate(occupation = str_replace(occupation, pattern = "\x92", replacement = "")) %>% 
+# Then I arrange by gender and income
+  arrange(gender, desc(average_taxable_income)) %>% 
+# And let's only use these variables
+  select(c(occupation, gender, average_taxable_income))
+```
+
+# Tidy up
+
+Here is my approach to getting the first 50
+
+```{r message=FALSE, warning=FALSE}
+top_jobs <- data %>% 
+  group_by(gender) %>% 
+  top_n(50)
+```
+
+## Female top 50 jobs
+```{r message=FALSE, warning=FALSE}
+top_jobs %>% 
+  filter(gender == "Female") %>% 
+  select(-gender) %>% 
+  knitr::kable()
+```
+
+## Male top 50 jobs
+```{r}
+top_jobs %>% 
+  filter(gender == "Male") %>% 
+  select(-gender) %>% 
+  knitr::kable()
+```
+
+
+# Graphing
+
+```{r, warning=FALSE, message=FALSE}
+data %>%
+  # Scale by hundred thousand dollars
+  mutate(income = average_taxable_income/100000) %>%
+  # Select the top 10 per gender
+  group_by(gender) %>% 
+  top_n(10) %>% 
+  # Create a rank for the plot
+  mutate(rank = rank(income)) %>% 
+  # This is so genders are split left and right
+  mutate(income = ifelse(test = gender == "Female", yes = -income, no = income)) %>% 
+  ggplot(aes(x = rank, y = income, fill = gender, ymin = -6, ymax = 8.5)) +
+  geom_col() +
+  geom_text(aes(x = rank,y = 0.5*income, label = occupation), size = 1.8) +
+  geom_label(
+    aes(
+      x = rank,
+      y = ifelse(test = gender == "Female", 1.5 * income, 1.3 * income),
+      label = paste("$", format(100000 * abs(income), big.mark = ","))
+    ), 
+    fill = "white") +
+  ylab("Average Taxable Income (Hundreds of Thousands of Dollars)") +
+  labs(title = "Top 10 Highest-Paid Occupations", fill = "Gender") +
+  scale_y_continuous(labels = abs) +
+  theme_bw() +
+  coord_flip() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank()) 
+
+ggsave(filename = "plot1.png", device = "png", plot = last_plot())
+
+```

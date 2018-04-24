@@ -1,0 +1,116 @@
+---
+title: "Tidy Tuesday Week 3"
+author: "Felipe Flores"
+output: github_document
+---
+
+First of all, let's import the necessary packages:
+```{r setup, include = TRUE}
+library(tidyverse)
+library(rjson)
+colors <- rjson::fromJSON(file = "colors.json")
+```
+
+`Rjson` is only needed for my color palette, which I created as a JSON from [here](http://tools.medialab.sciences-po.fr/iwanthue/). I also imported my color palette as the vector named `colors`. Next, since I want to be able to produce as many as these plots as I want, I created a function that would let me avoid redundance. The function first checks whether we're computing for the entire world or just a country, then does the necessary tidying up and plotting. Of course, in order to create the function I first explored the dataset. This is just the finalized product.
+
+```{r function, echo=TRUE, include=TRUE}
+plotting_function <- 
+  function(
+    data,
+    yearOfInterest,
+    countryName,
+    title = paste("Share of death by cause, ", countryName, ", ", yearOfInterest, sep = ""),
+    subtitle = "",
+    caption = "Source: IHME, Global Burden of Disease"
+  ){
+    if (countryName == "World") {
+      data <- data %>% 
+        filter(year == yearOfInterest) %>% 
+        select(-c(country, country_code, year)) %>% 
+        summarize_all(funs("sum"))
+    } else {
+      data <- data %>%
+        filter(year == yearOfInterest, country == countryName) %>%
+        select(-c(country, country_code, year))
+    }
+    data %>% 
+      gather(key = "disease", value = "deaths") %>% 
+      mutate(deaths = deaths / sum(deaths)) %>% 
+      ggplot(aes(x = reorder(disease, deaths), y = deaths, fill = disease))+
+      geom_bar(stat = "identity")+
+      geom_text(aes(label = paste(round(100 * deaths, 2), "%")), hjust = -0.1)+
+      scale_y_continuous(labels = scales::percent, limits = c(0, 0.35))+
+      scale_fill_manual(values = colors)+
+      guides(fill = FALSE)+
+      coord_flip()+
+      xlab("")+
+      ylab("")+
+      theme_classic()+
+      labs(title = title, subtitle = subtitle, caption = caption)+
+      theme(
+        panel.grid.major.x = element_line(linetype = "dotted", color = "#5043484A")
+      )
+  }
+```
+
+So let's try it out on the dataset! First we import the data with `readxl` and use `stringr` to remove the percentage signs from the variable names. I also decided to omit `NA`'s, which I think is why my numbers are slightly different from those in the article. Oh well *shrug* 
+```{r data_import}
+data <- readxl::read_xlsx("global_mortality.xlsx") %>% 
+  rename_all(funs(stringr::str_remove_all(., "[(%)]"))) %>% 
+  na.omit() 
+```
+
+Finally, let's use the function on the world, the US, and my beloved Chile for 2016. 
+
+```{r plots}
+plotting_function(data = data, yearOfInterest = 2016, countryName = "World")
+
+plotting_function(data = data, yearOfInterest = 2016, countryName = "United States")
+
+plotting_function(data = data, yearOfInterest = 2016, countryName = "Chile")
+
+```
+
+
+Nice! Of course, we could input any country and year and get the same kind of plot. That's all friends!
+
+Edit (04/17/2018)
+
+```{r}
+colors2 <- sample(rjson::fromJSON(file = "colors2.json"))
+country_tracking <- function(
+  data, 
+  countryName, 
+  colorVector = colors,
+  title = "",
+  subtitle = "",
+  caption = ""
+  ){
+  if (countryName == "World") {
+    data <- data %>% 
+      select(-country_code) %>% 
+      group_by(year) %>% 
+      summarize_at(funs("sum"), .vars = vars(-country))
+  } else {
+    data <- data %>%
+      filter(country == countryName) %>%
+      select(-c(country, country_code))
+  }
+  data %>% 
+    gather(key = "Cause", value = "Deaths", -year) %>% 
+    ggplot(aes(x = year, y = Deaths, fill = reorder(Cause, Deaths)))+
+    geom_area(color = "black")+
+    scale_fill_manual(values = colorVector)+
+    guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE))+
+    labs(fill = "Cause of Death")+
+    ylab("Deaths (%)")+
+    labs(title = title, subtitle = subtitle, caption = caption)
+}
+
+chile_tracking <- country_tracking(data, "Chile", colors2)
+chile_tracking
+
+world_tracking <- country_tracking(data, "World", colors2, title = "lol", subtitle = "lol1", caption = "lol2")
+world_tracking
+```
+

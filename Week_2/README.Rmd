@@ -1,0 +1,89 @@
+---
+title: "Felipe Flores - Tidy Tuesday Week 2"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(survival)
+library(ggthemes)
+```
+
+# Tidy Tuesday - Week 2
+
+```{r tidy}
+# Read with tidy function
+data <- readxl::read_xlsx("tidy_tuesday_week2.xlsx") %>% 
+  na.omit()
+
+# Tidy the data up a little bit
+df <- data %>% 
+  gather(key = "position", value = "salary", position = Cornerback:`Wide Receiver`) %>%
+  mutate(salary = salary / 1000000) %>% 
+  mutate(
+    status = case_when(
+      position %in% 
+        c("Cornerback", 
+          "Defensive Lineman", 
+          "Linebacker", 
+          "Safety",
+          "Special Teamer"
+          ) ~ "Defense",
+      position %in%
+        c("Quarterback",
+          "Offensive Lineman",
+          "Running Back",
+          "Tight End",
+          "Wide Receiver"
+        ) ~ "Offense"
+    )
+  )
+
+# Filter out top 16 paid players per year
+df <- df %>% 
+  group_by(year, position) %>% 
+  top_n(n = 16, wt = salary)
+
+# Data frame with total year pay
+spent_per_year <- df %>% 
+  group_by(year) %>% 
+  summarize(spent_per_year = sum(salary))
+
+# Data frame with position pay per year
+spent_per_position <- df %>% 
+  group_by(position, year) %>% 
+  summarize(spent_per_position = sum(salary))
+
+# Create data frame with per-year, per-position money
+data_frame_for_plot_1 <- df %>% 
+  right_join(spent_per_year) %>% 
+  right_join(spent_per_position) %>% 
+  group_by(year, position, status) %>%
+  mutate(percent_spent = 100*(spent_per_position/spent_per_year)) %>% 
+  summarize(percent_spent = mean(percent_spent)) 
+
+# Generate plot 1
+data_frame_for_plot_1 %>% 
+  ggplot(aes(x = year, y = percent_spent)) +
+  geom_smooth(aes(group = position, col = position), se = FALSE) +
+  scale_colour_brewer(palette = "Paired") +
+  labs(title = "Top 10 Salaries by Position", subtitle = "Percent of monet spent on the top 16 players at each position") +
+  facet_grid(facets = ~status) +
+  theme(plot.title = element_text(hjust = 1))+
+  theme_solarized_2()+
+  xlab("Year")+
+  ylab("Percent spent on each position")
+
+# Generate plot 2
+df %>% 
+  ggplot(aes(x = year, y =salary)) +
+  geom_point(aes(col = position))+
+  geom_smooth( se = FALSE, col = "red")+
+  facet_wrap(facets = status ~ position, nrow = 2)+
+  theme_solarized_2()+
+  theme(legend.position = "none")+
+  labs(title = "The average pay for top running backs has stalled", subtitle = "Average cap value of 16 highest-paid players in  each position")+
+  ylab("Cap Value (millions of dollars)")+
+  xlab("Year")
+```
