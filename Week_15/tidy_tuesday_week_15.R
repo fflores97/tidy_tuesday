@@ -9,7 +9,8 @@ library(usmap)
 
 # From week 15
 beer <- read_xlsx("week15_beers.xlsx")
-brewery <- read_xlsx("week15_beers.xlsx", sheet = "breweries")
+brewery <- read_xlsx("week15_beers.xlsx", sheet = "breweries") %>% 
+  rename(brewery_id = id)
 
 # From week 5
 census <- read_csv("week5_acs2015_county_data.csv")
@@ -39,25 +40,46 @@ state_df <- brewery %>%
 
 beerCounter <- function(brewery_data) {
  ids <- brewery_data %>% 
-   pull(id)
+   pull(brewery_id)
  state_count <- beer %>% 
    filter(brewery_id %in% ids) %>% 
    count()
  return(as.numeric(state_count))
 }
 
+averageABV <- function(brewery_data){
+  ids <- brewery_data %>% 
+    pull(brewery_id)
+  averageABV <- beer %>% 
+    na.omit() %>% 
+    filter(brewery_id %in% ids) %>% 
+    summarise(mean(abv))
+  return(as.numeric(averageABV))
+}
+
+state_beers <- function(brewery_data){
+  ids <- brewery_data %>% 
+    pull(brewery_id)
+  state_beers <- beer %>% 
+    na.omit() %>% 
+    filter(brewery_id %in% ids)
+  return(state_beers)
+}
+
 ## Testing
-state %>% 
+state_df %>% 
   filter(state == "CA") %>% 
-  select(data) %>%
+  select(brewery_data) %>%
   unnest() %>% 
   beerCounter()
 
 beers_per_state <- state_df %>% 
-  mutate(beers = map_dbl(.x = brewery_data,.f = beerCounter)) #%>% 
+  mutate(beers = map_dbl(.x = brewery_data,.f = beerCounter)) %>% 
+  mutate(average_ABV = map_dbl(.x = brewery_data, .f = averageABV)) %>% 
+  mutate(state_beers = map(brewery_data, state_beers))
   select(state, beers)
 
-usmap::plot_usmap(data = beers_per_state, regions = "state", values = "beers")
+usmap::plot_usmap(data = beers_per_state, regions = "state", values = "average_ABV")
 
 
 
